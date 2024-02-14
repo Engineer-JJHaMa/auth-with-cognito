@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "aimelodydemo"
+version = "0.1.0"
+description = ""
+authors = ["SeungJong Ha <hippo0419@kaist.ac.kr>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.8.17"
+fastapi = {extras = ["all"], version = "^0.109.2"}
+uvicorn = {extras = ["standard"], version = "^0.27.0.post1"}
+sqlalchemy = "^2.0.25"
+psycopg2-binary = "^2.9.9"
+alembic = "^1.13.1"
+google-auth-oauthlib = "^1.2.0"
+google-api-python-client = "^2.116.0"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.8"
+pydantic-settings = "^2.1.0"
+pytz = "^2024.1"
+
+
+[tool.poetry.scripts]
+test = "uvicorn aimelodydemo.main:app --reload"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
