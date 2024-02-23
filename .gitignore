@@ -4,3 +4,6 @@ tempCodeRunnerFile.py
 
 alembic
 alembic.ini
+
+*.pem
+

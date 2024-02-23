@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Column, Integer, String, Boolean, UUID
-from aimelodydemo.core.database import Base
+from core.database import Base
 
 
 class UserSchema(Base):

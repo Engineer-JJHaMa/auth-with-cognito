@@ -1,9 +1,10 @@
 [tool.poetry]
-name = "aimelodydemo"
+name = "AImelodyDemo"
 version = "0.1.0"
 description = ""
 authors = ["SeungJong Ha <hippo0419@kaist.ac.kr>"]
 readme = "README.md"
+packages = [{include = "server"}]
 
 [tool.poetry.dependencies]
 python = "3.8.17"
@@ -22,7 +23,8 @@ pytz = "^2024.1"
 
 
 [tool.poetry.scripts]
-test = "uvicorn aimelodydemo.main:app --reload"
+start = "server.main:start"
+
 
 [build-system]
 requires = ["poetry-core"]

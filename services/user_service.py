@@ -4,16 +4,18 @@ from urllib import parse
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from fastapi.security import OAuth2
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from jose import JWTError, jwt
+from jose import jwt
+from jose.exceptions import ExpiredSignatureError, JWTError
 from passlib.context import CryptContext
 from pytz import timezone
 from sqlalchemy.orm import Session
 
-from aimelodydemo.core.config import get_settings
-from aimelodydemo.core.schemas import UserSchema
-from aimelodydemo.models.user_model import User, UserCreate
+from core.config import get_settings
+from core.schemas import UserSchema
+from models.user_model import User, UserCreate, Token
 
 
 # ------------------------------------------------------------------
@@ -35,7 +37,7 @@ def create_user(db: Session, user: UserCreate) -> UserSchema:
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail="Email already registered")
     
-    secret_key: str = get_settings().secret_key
+    secret_key: str = get_settings().jwt_secret_key
     db_user = UserSchema(
         email=user.email,
         password=None if user.is_social_login else get_password_hash(user.password),
@@ -74,35 +76,50 @@ def authenticate_user(db: Session, email: str, passwowrd: str) -> Union[UserSche
         return None
     return user
 
-def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone('Asia/Seoul')) + expires_delta
-    else:
-        expire = datetime.now(timezone('Asia/Seoul')) + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    print(to_encode)
-    encoded_jwt = jwt.encode(
-        to_encode,
-        get_settings().secret_key,
-        algorithm=get_settings().algorithm
-    )
-    return encoded_jwt
 
-def create_refresh_token(data: dict, expires_delta: Union[timedelta, None] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone('Asia/Seoul')) + expires_delta
-    else:
-        expire = datetime.now(timezone('Asia/Seoul')) + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    print(to_encode)
+def decode_access_token(credentials: str) -> Union[str, None]:
+    """
+    JWT 토큰값을 받아,
+    1. Secret key를 통해 올바른 access 토큰인지 검사
+    2. 올바른 토큰인 경우 User id를 리턴
+    3. 올바르지 않은 경우 None을 리턴
+    """
+    try:
+        decoded_token = jwt.decode(
+            token=credentials,
+            key=get_settings().jwt_secret_key,
+            algorithms=[get_settings().jwt_algorithm]
+        )
+        return decoded_token["sub"]
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token is expired"
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token"
+        )
+
+
+def _create_token(content: str, expires_delta: timedelta) -> str:
+    to_encode = {
+        "sub": content,
+        "exp": datetime.now(timezone('Asia/Seoul')) + expires_delta
+    }
     encoded_jwt = jwt.encode(
         to_encode,
         get_settings().jwt_secret_key,
         algorithm=get_settings().jwt_algorithm
     )
     return encoded_jwt
+
+def create_access_token(user: User) -> str:
+    return _create_token(str(user.id), timedelta(minutes=get_settings().access_token_expire_minutes))
+
+def create_refresh_token(user: User) -> str:
+    return _create_token(str(user.id), timedelta(days=get_settings().refresh_token_expire_days))
 
 
 authorize_endpoint = "http://localhost:8000/api/users/auth/google/callback/"

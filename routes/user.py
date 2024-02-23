@@ -2,28 +2,47 @@ from typing import Union
 from typing_extensions import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, status, Query
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    status
+)
 from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from aimelodydemo.core.dependencies import get_db
-from aimelodydemo.models.user_model import User, UserCreate, JWTToken
-from aimelodydemo.services.user_service import (
+from core.dependencies import validate_access_token, get_db
+from models.user_model import User, UserCreate, Token, AccessRefreshTokenPair
+from services.user_service import (
     create_user,
     get_user_by_email,
+    get_user_by_id,
     authenticate_user,
     create_access_token,
+    create_refresh_token,
     get_redirection_url_to_google_auth,
     get_email_from_google_code,
 )
 
 
 router = APIRouter(
-    prefix="/api/users",
-    tags=["users"],
+    prefix="/api/user",
+    tags=["user"],
     responses={404: {"description": "Not found"}},
 )
 
+
+@router.get("/me", response_model=User)
+def get_current_user(user_id: str = Depends(validate_access_token), db: Session = Depends(get_db)):
+    user_info = get_user_by_id(db, UUID(user_id))
+    if user_info == None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
+    return user_info
 
 @router.get("/{email}", response_model=User)
 def get_user(email: str, db: Session = Depends(get_db)):
@@ -32,41 +51,27 @@ def get_user(email: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
     return user_info
 
-@router.post("/auth/register", response_model=User, status_code=status.HTTP_201_CREATED)
+
+@router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
 def register_user(
-    email: Annotated[str, Form()],
-    first_name: Annotated[str, Form()],
-    last_name: Annotated[str, Form()],
-    username: Annotated[str, Form()],
-    is_socail_login: Annotated[bool, Form()],
-    social_platform: Annotated[Union[str, None], Form()] = None,
-    password: Annotated[Union[str, None], Form()] = None,
+    user: UserCreate = Depends(UserCreate.as_form),
     db: Session = Depends(get_db)
 ):
-    if is_socail_login and (social_platform == None or password != None):
+    if user.is_social_login and (user.social_platform == None or user.password != None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Do not contain socila_platform and password for social register"
         )
-    elif not is_socail_login and (social_platform != None or password == None):
+    elif not user.is_social_login and (user.social_platform != None or user.password == None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Contain social_platform and password for common register"
         )
     
-    user_info = UserCreate(
-        email=email,
-        password=password,
-        first_name=first_name,
-        last_name=last_name,
-        username=username,
-        is_social_login=is_socail_login,
-        social_platform=social_platform,
-    )
-    return create_user(db, user_info)
+    return create_user(db, user)
     
 
-@router.post("/auth/login")
+@router.post("/login")
 def login_for_access_token(
     email: Annotated[str, Form()],
     password: Annotated[str, Form()],
@@ -79,17 +84,21 @@ def login_for_access_token(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"}, # 공부해볼 것
         )
-    access_token = create_access_token(
-        data={"uuid": str(user.id)}
+    # User를 요구하지만 UserSchema 넘겼습니다.
+    access_token = create_access_token(user)
+    refresh_token = create_refresh_token(user)
+    
+    return AccessRefreshTokenPair(
+        access_token=Token(token=access_token, token_type="access"),
+        refresh_token=Token(token=refresh_token, token_type="refresh")
     )
-    return JWTToken(access_token=access_token, token_type="bearer")
 
 
-@router.get("/auth/google")
+@router.get("/social-login/google")
 def redirect_to_google_oauth():
     url = get_redirection_url_to_google_auth()
     return RedirectResponse(url)
 
-@router.get("/auth/google/callback/")
+@router.get("/social-login/google/callback/")
 def google_oauth_callback(code: str):
     get_email_from_google_code(code)
