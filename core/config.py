@@ -3,6 +3,9 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    AWS_COGNITO_USER_POOL_ID: str
+    AWS_COGNITO_CLIENT_ID: str
+    AWS_COGNITO_CLIENT_SECRET: str 
     sqlalchemy_database_url: str
     google_client_id: str
     google_secret_pw: str
